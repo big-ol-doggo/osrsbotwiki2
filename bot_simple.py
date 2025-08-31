@@ -758,6 +758,12 @@ async def help_command(interaction: discord.Interaction):
     )
     
     embed.add_field(
+        name="🔄 /sync",
+        value="Sync bot commands (Admin only)",
+        inline=False
+    )
+    
+    embed.add_field(
         name="❓ /help",
         value="Show this help message",
         inline=False
@@ -778,6 +784,42 @@ async def help_command(interaction: discord.Interaction):
     
     embed.set_footer(text="Data sourced from the official Old School RuneScape Wiki")
     await interaction.response.send_message(embed=embed)
+
+@bot.tree.command(name="sync", description="Sync bot commands (Admin only)")
+async def sync_commands(interaction: discord.Interaction):
+    """Sync bot commands - Admin only"""
+    # Check if user has admin permissions
+    if not interaction.user.guild_permissions.administrator:
+        embed = discord.Embed(
+            title="❌ Permission Denied",
+            description="You need administrator permissions to use this command.",
+            color=discord.Color.red()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+    
+    await interaction.response.defer()
+    
+    try:
+        synced = await bot.tree.sync()
+        embed = discord.Embed(
+            title="✅ Commands Synced",
+            description=f"Successfully synced {len(synced)} command(s) to Discord!",
+            color=discord.Color.green()
+        )
+        embed.add_field(
+            name="Synced Commands",
+            value="\n".join([f"• `/{cmd.name}`" for cmd in synced]),
+            inline=False
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True)
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Sync Failed",
+            description=f"Failed to sync commands: {str(e)}",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 # Error handling
 @bot.event
