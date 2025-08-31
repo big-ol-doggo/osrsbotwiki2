@@ -476,8 +476,9 @@ Please provide:
 
 Format your response in a clear, structured way."""
 
-        # Get AI response
-        response = openai.ChatCompletion.create(
+        # Get AI response using new OpenAI API format
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that explains Old School RuneScape topics clearly and concisely."},
@@ -507,6 +508,209 @@ Format your response in a clear, structured way."""
             color=discord.Color.red()
         )
         await interaction.followup.send(embed=error_embed)
+
+@bot.tree.command(name="drops", description="Get drop rates and loot table information for an OSRS monster/item")
+async def get_drops(interaction: discord.Interaction, target: str):
+    """Get drop rates and loot table information for an OSRS monster or item"""
+    await interaction.response.defer()
+    
+    try:
+        # First search for the target
+        results = await wiki_searcher.search_wiki(target)
+        
+        if not results:
+            embed = discord.Embed(
+                title="❌ Target Not Found",
+                description=f"Could not find information about '{target}' on the OSRS Wiki.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Get the first (most relevant) result
+        best_match = results[0]
+        page_title = best_match['title']
+        
+        # Get detailed content
+        content = await wiki_searcher.get_page_content(page_title)
+        
+        if not content:
+            embed = discord.Embed(
+                title="❌ Content Error",
+                description=f"Could not retrieve content for '{page_title}'.",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=embed)
+            return
+        
+        # Extract and clean content
+        text = clean_html(content['content'])
+        
+        # Look for drop rate information
+        drop_info = extract_drop_information(text, page_title)
+        
+        if not drop_info:
+            # If no specific drop info found, show general page info
+            embed = discord.Embed(
+                title=f"📦 {page_title}",
+                description="No specific drop rate information found, but here's the page content:",
+                color=discord.Color.orange(),
+                url=f"{OSRS_WIKI_BASE_URL}/{page_title.replace(' ', '_')}"
+            )
+            
+            # Limit text length
+            if len(text) > 1000:
+                text = text[:1000] + "..."
+            
+            embed.add_field(name="📄 Page Content", value=text, inline=False)
+        else:
+            # Create embed with drop information
+            embed = discord.Embed(
+                title=f"📦 Drop Rates: {page_title}",
+                description=drop_info['description'],
+                color=discord.Color.green(),
+                url=f"{OSRS_WIKI_BASE_URL}/{page_title.replace(' ', '_')}"
+            )
+            
+            # Add drop categories
+            for category, items in drop_info['categories'].items():
+                if items:
+                    items_text = "\n".join(items[:8])  # Limit to 8 items per category
+                    if len(items) > 8:
+                        items_text += f"\n... and {len(items) - 8} more items"
+                    
+                    embed.add_field(
+                        name=f"🎯 {category}",
+                        value=items_text,
+                        inline=False
+                    )
+            
+            # Add additional info if available
+            if drop_info.get('additional_info'):
+                embed.add_field(
+                    name="ℹ️ Additional Info",
+                    value=drop_info['additional_info'],
+                    inline=False
+                )
+        
+        embed.set_footer(text="Click the title to view the full page on the OSRS Wiki")
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Error",
+            description=f"An error occurred while getting drop information: {str(e)}",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=error_embed)
+
+def extract_drop_information(text: str, page_title: str) -> Optional[Dict[str, Any]]:
+    """Extract drop rate information from wiki text"""
+    drop_info = {
+        'description': f"Drop rates and loot information for {page_title}",
+        'categories': {},
+        'additional_info': ""
+    }
+    
+    # Common drop categories to look for
+    categories = {
+        'Always': ['always', 'guaranteed', '100%'],
+        'Common': ['common', 'frequent', 'often'],
+        'Uncommon': ['uncommon', 'sometimes', 'occasionally'],
+        'Rare': ['rare', 'uncommon', 'infrequently'],
+        'Very Rare': ['very rare', 'extremely rare', 'very uncommon'],
+        'Special': ['special', 'unique', 'exclusive']
+    }
+    
+    # Split text into lines for easier processing
+    lines = text.split('\n')
+    
+    # Look for drop rate patterns
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Look for percentage patterns (e.g., "1/128 (0.78%)")
+        if any(pattern in line.lower() for pattern in ['%', '/', 'drop', 'loot', 'chance']):
+            # Determine category based on rarity
+            category = determine_rarity_category(line)
+            if category:
+                if category not in drop_info['categories']:
+                    drop_info['categories'][category] = []
+                drop_info['categories'][category].append(line)
+    
+    # If no structured drops found, look for general drop mentions
+    if not any(drop_info['categories'].values()):
+        drop_mentions = []
+        for line in lines:
+            if any(word in line.lower() for word in ['drop', 'loot', 'reward', 'item']):
+                drop_mentions.append(line)
+        
+        if drop_mentions:
+            drop_info['categories']['General Drops'] = drop_mentions[:10]  # Limit to 10 mentions
+    
+    # Check if we found any drop information
+    if any(drop_info['categories'].values()):
+        return drop_info
+    
+    return None
+
+def determine_rarity_category(line: str) -> Optional[str]:
+    """Determine the rarity category based on drop rate information"""
+    line_lower = line.lower()
+    
+    # Look for percentage patterns
+    if '%' in line:
+        # Extract percentage
+        import re
+        percentage_match = re.search(r'(\d+(?:\.\d+)?)\s*%', line)
+        if percentage_match:
+            percentage = float(percentage_match.group(1))
+            
+            if percentage >= 100:
+                return 'Always'
+            elif percentage >= 10:
+                return 'Common'
+            elif percentage >= 1:
+                return 'Uncommon'
+            elif percentage >= 0.1:
+                return 'Rare'
+            else:
+                return 'Very Rare'
+    
+    # Look for fraction patterns (e.g., "1/128")
+    fraction_match = re.search(r'(\d+)/(\d+)', line)
+    if fraction_match:
+        numerator = int(fraction_match.group(1))
+        denominator = int(fraction_match.group(2))
+        if denominator > 0:
+            percentage = (numerator / denominator) * 100
+            
+            if percentage >= 100:
+                return 'Always'
+            elif percentage >= 10:
+                return 'Common'
+            elif percentage >= 1:
+                return 'Uncommon'
+            elif percentage >= 0.1:
+                return 'Rare'
+            else:
+                return 'Very Rare'
+    
+    # Look for rarity keywords
+    if any(word in line_lower for word in ['always', 'guaranteed', '100%']):
+        return 'Always'
+    elif any(word in line_lower for word in ['common', 'frequent', 'often']):
+        return 'Common'
+    elif any(word in line_lower for word in ['uncommon', 'sometimes', 'occasionally']):
+        return 'Uncommon'
+    elif any(word in line_lower for word in ['rare', 'uncommon', 'infrequently']):
+        return 'Rare'
+    elif any(word in line_lower for word in ['very rare', 'extremely rare', 'very uncommon']):
+        return 'Very Rare'
+    
+    return None
 
 @bot.tree.command(name="help", description="Show available commands and how to use them")
 async def help_command(interaction: discord.Interaction):
@@ -544,6 +748,12 @@ async def help_command(interaction: discord.Interaction):
     embed.add_field(
         name="🤖 /ai [topic]",
         value="Get AI-enhanced analysis of an OSRS topic (requires OpenAI API key)",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📦 /drops [target]",
+        value="Get drop rates and loot table information for an OSRS monster or item",
         inline=False
     )
     

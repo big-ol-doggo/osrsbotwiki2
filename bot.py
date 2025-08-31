@@ -518,8 +518,9 @@ Please provide:
 
 Format your response in a clear, structured way."""
 
-        # Get AI response
-        response = openai.ChatCompletion.create(
+        # Get AI response using new OpenAI API format
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful assistant that explains Old School RuneScape topics clearly and concisely."},
