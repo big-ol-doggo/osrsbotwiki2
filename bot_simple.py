@@ -477,18 +477,25 @@ Please provide:
 Format your response in a clear, structured way."""
 
         # Get AI response using new OpenAI API format
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that explains Old School RuneScape topics clearly and concisely."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
-        
-        ai_response = response.choices[0].message.content
+        try:
+            client = openai.OpenAI(api_key=OPENAI_API_KEY)
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that explains Old School RuneScape topics clearly and concisely."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.7
+            )
+        except Exception as ai_error:
+            # Fallback to a simple summary if AI fails
+            print(f"AI API error: {ai_error}")
+            ai_response = f"Here's a summary of {topic}:\n\n{wiki_text[:800]}..."
+            if len(wiki_text) > 800:
+                ai_response += "\n\n[Content truncated due to AI service issues]"
+        else:
+            ai_response = response.choices[0].message.content
         
         # Create embed
         embed = discord.Embed(
