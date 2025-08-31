@@ -1,0 +1,13 @@
+services:
+  - type: worker
+    name: osrs-wiki-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: OSRS_WIKI_BASE_URL
+        value: https://oldschool.runescape.wiki
+      - key: OPENAI_API_KEY
+        sync: false

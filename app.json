@@ -1,0 +1,32 @@
+{
+  "name": "OSRS Wiki Discord Bot",
+  "description": "A Discord bot that searches the Old School RuneScape Wiki using MediaWiki API",
+  "repository": "https://github.com/yourusername/osrs-wiki-bot",
+  "keywords": ["discord", "bot", "osrs", "runescape", "wiki", "python"],
+  "env": {
+    "DISCORD_TOKEN": {
+      "description": "Your Discord bot token from the Discord Developer Portal",
+      "required": true
+    },
+    "OSRS_WIKI_BASE_URL": {
+      "description": "The base URL for the OSRS Wiki",
+      "value": "https://oldschool.runescape.wiki",
+      "required": false
+    },
+    "OPENAI_API_KEY": {
+      "description": "OpenAI API key for AI-enhanced features (optional)",
+      "required": false
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "free"
+    }
+  }
+}
